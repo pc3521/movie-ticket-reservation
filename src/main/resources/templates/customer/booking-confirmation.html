@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('CineBook - Booking Confirmed')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+<main class="main-content">
+    <div class="confirmation-card">
+        <h2>Booking Confirmed!</h2>
+        <p style="color:var(--text-secondary);">Your tickets have been reserved successfully.</p>
+
+        <div class="confirmation-details">
+            <p><strong>Booking Ref:</strong> <span th:text="${param.ref}"></span></p>
+        </div>
+
+        <div style="display:flex; gap:1rem; margin-top:1.5rem;">
+            <a th:href="@{/customer/bookings}" class="btn btn-primary" style="flex:1;">View My Bookings</a>
+            <a th:href="@{/customer/dashboard}" class="btn btn-secondary" style="flex:1;">Browse More</a>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

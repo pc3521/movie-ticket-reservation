@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('CineBook - Live Chat')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+<main class="main-content">
+    <div class="chat-container">
+        <div class="chat-header">
+            <h3>
+                Support Chat
+                <span class="badge"
+                      th:if="${session.status != null}"
+                      th:classappend="${session.status.name() == 'ACTIVE' ? 'badge-active' : (session.status.name() == 'PENDING' ? 'badge-pending' : 'badge-cancelled')}"
+                      th:text="${session.status}" style="margin-left:0.5rem;"></span>
+            </h3>
+            <button id="closeBtn" class="btn btn-danger btn-sm"
+                    th:if="${session.status != null and session.status.name() != 'CLOSED'}">Close Chat</button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div th:each="msg : ${messages}"
+                 class="chat-message"
+                 th:classappend="${msg.sender.username == currentUser.username} ? 'sent' : 'received'">
+                <div class="msg-sender" th:text="${msg.sender.username}"></div>
+                <div th:text="${msg.content}"></div>
+                <div class="msg-time" th:text="${#temporals.format(msg.sentAt, 'HH:mm')}"></div>
+            </div>
+
+            <div th:if="${session.status != null and session.status.name() == 'PENDING'}" class="chat-message system">
+                Waiting for an admin to join the chat...
+            </div>
+        </div>
+
+        <div class="chat-input" th:if="${session.status == null or session.status.name() != 'CLOSED'}">
+            <input type="text" id="messageInput" placeholder="Type a message..."
+                   onkeypress="if(event.key==='Enter') sendMessage();">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+
+        <div th:if="${session.status != null and session.status.name() == 'CLOSED'}" style="padding:1rem 1.5rem; text-align:center; color:var(--text-muted);">
+            This chat session has been closed.
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script th:inline="javascript">
+const sessionId = [[${session.id}]];
+const currentUsername = [[${currentUser.username}]];
+let stompClient = null;
+
+function connect() {
+    const socket = new SockJS('/ws');
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null;
+    stompClient.connect({}, () => {
+        stompClient.subscribe('/topic/chat/' + sessionId, (message) => {
+            const msg = JSON.parse(message.body);
+            displayMessage(msg);
+        });
+    });
+}
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const content = input.value.trim();
+    if (!content || !stompClient) return;
+
+    stompClient.send('/app/chat.send', {}, JSON.stringify({
+        sessionId: sessionId,
+        content: content
+    }));
+    input.value = '';
+}
+
+function displayMessage(msg) {
+    const container = document.getElementById('chatMessages');
+
+    if (msg.type === 'CLOSE') {
+        const div = document.createElement('div');
+        div.className = 'chat-message system';
+        div.textContent = msg.content;
+        container.appendChild(div);
+        const inputArea = document.querySelector('.chat-input');
+        if (inputArea) inputArea.style.display = 'none';
+    } else if (msg.type === 'JOIN') {
+        const div = document.createElement('div');
+        div.className = 'chat-message system';
+        div.textContent = msg.content;
+        container.appendChild(div);
+    } else {
+        const div = document.createElement('div');
+        div.className = 'chat-message ' + (msg.senderUsername === currentUsername ? 'sent' : 'received');
+        div.innerHTML = `
+            <div class="msg-sender">${msg.senderUsername}</div>
+            <div>${msg.content}</div>
+            <div class="msg-time">${msg.sentAt || ''}</div>
+        `;
+        container.appendChild(div);
+    }
+
+    container.scrollTop = container.scrollHeight;
+}
+
+document.getElementById('closeBtn')?.addEventListener('click', () => {
+    if (!confirm('Close this chat session?')) return;
+    fetch('/api/chat/close/' + sessionId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // WebSocket will handle the UI update
+            }
+        });
+});
+
+window.addEventListener('load', () => {
+    const container = document.getElementById('chatMessages');
+    container.scrollTop = container.scrollHeight;
+});
+
+connect();
+</script>
+</body>
+</html>

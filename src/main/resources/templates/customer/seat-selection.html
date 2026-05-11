@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('CineBook - Select Seats')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+<main class="main-content">
+    <h2 class="section-title">Select Your Seats</h2>
+    <p style="color:var(--text-secondary); margin-bottom:1.5rem;">
+        <strong th:text="${screening.movie.title}"></strong> |
+        <span th:text="${#temporals.format(screening.screenTime, 'MMM dd, hh:mm a')}"></span> |
+        <span th:text="${screening.hallName}"></span> |
+        Select <strong th:text="${quantity}"></strong> seat(s)
+    </p>
+
+    <div class="seat-map-container">
+        <div class="screen-indicator"></div>
+
+        <div id="seatGrid"></div>
+
+        <div class="seat-legend">
+            <div class="legend-item"><div class="legend-box legend-available"></div> Available</div>
+            <div class="legend-item"><div class="legend-box legend-selected"></div> Selected</div>
+            <div class="legend-item"><div class="legend-box legend-booked"></div> Booked</div>
+            <div class="legend-item"><div class="legend-box legend-locked"></div> Locked</div>
+        </div>
+
+        <div class="seat-info">
+            <div>
+                <span style="color:var(--text-secondary);">Selected: </span>
+                <strong id="selectedSeatsLabel">None</strong>
+            </div>
+            <div>
+                <span style="color:var(--text-secondary);">Total: </span>
+                <strong id="totalPrice" style="color:var(--accent);">$0.00</strong>
+            </div>
+            <button id="confirmBtn" class="btn btn-primary" disabled>Confirm Booking</button>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script th:inline="javascript">
+const screeningId = [[${screening.id}]];
+const totalRows = [[${screening.totalRows}]];
+const seatsPerRow = [[${screening.seatsPerRow}]];
+const quantity = parseInt([[${quantity}]], 10);
+const price = parseFloat([[${screening.price}]]);
+
+let selectedSeats = [];
+let bookedSeats = new Set();
+let lockedSeats = new Set();
+let stompClient = null;
+
+function buildSeatGrid() {
+    const grid = document.getElementById('seatGrid');
+    grid.innerHTML = '';
+
+    for (let r = 1; r <= totalRows; r++) {
+        const row = document.createElement('div');
+        row.className = 'seat-row';
+
+        const label = document.createElement('div');
+        label.className = 'row-label';
+        label.textContent = String.fromCharCode(64 + r);
+        row.appendChild(label);
+
+        for (let s = 1; s <= seatsPerRow; s++) {
+            const seat = document.createElement('div');
+            seat.className = 'seat';
+            seat.textContent = s;
+            seat.dataset.row = r;
+            seat.dataset.number = s;
+
+            const key = r + '-' + s;
+            if (bookedSeats.has(key)) {
+                seat.classList.add('seat-booked');
+                seat.title = 'Booked';
+            } else if (lockedSeats.has(key)) {
+                seat.classList.add('seat-locked');
+                seat.title = 'Locked by another user';
+            } else {
+                seat.addEventListener('click', () => toggleSeat(seat, r, s));
+            }
+
+            // Re-apply selected state
+            if (selectedSeats.find(ss => ss.row === r && ss.number === s)) {
+                seat.classList.add('seat-selected');
+            }
+
+            row.appendChild(seat);
+        }
+        grid.appendChild(row);
+    }
+}
+
+function toggleSeat(el, row, number) {
+    const idx = selectedSeats.findIndex(s => s.row === row && s.number === number);
+
+    if (idx >= 0) {
+        selectedSeats.splice(idx, 1);
+        el.classList.remove('seat-selected');
+        fetch('/api/seats/unlock', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({screeningId, row, number})
+        });
+        updateUI();
+    } else if (selectedSeats.length < quantity) {
+        fetch('/api/seats/lock', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({screeningId, row, number})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                selectedSeats.push({row, number});
+                el.classList.add('seat-selected');
+                updateUI();
+            } else {
+                alert('This seat is no longer available.');
+                loadSeats();
+            }
+        });
+    } else {
+        alert('You can only select ' + quantity + ' seat(s). Deselect one first.');
+    }
+}
+
+function updateUI() {
+    const labels = selectedSeats.map(s =>
+        String.fromCharCode(64 + s.row) + s.number
+    ).join(', ');
+    document.getElementById('selectedSeatsLabel').textContent = labels || 'None';
+    document.getElementById('totalPrice').textContent = '$' + (selectedSeats.length * price).toFixed(2);
+    document.getElementById('confirmBtn').disabled = selectedSeats.length !== quantity;
+}
+
+function loadSeats() {
+    fetch('/api/seats/' + screeningId)
+        .then(r => r.json())
+        .then(data => {
+            bookedSeats.clear();
+            lockedSeats.clear();
+            data.booked.forEach(s => bookedSeats.add(s.row + '-' + s.number));
+            if (data.locked) {
+                data.locked.forEach(k => lockedSeats.add(k));
+            }
+            buildSeatGrid();
+            updateUI();
+        });
+}
+
+function connectWebSocket() {
+    const socket = new SockJS('/ws');
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null;
+    stompClient.connect({}, () => {
+        stompClient.subscribe('/topic/seats/' + screeningId, (msg) => {
+            loadSeats();
+        });
+    });
+}
+
+document.getElementById('confirmBtn').addEventListener('click', () => {
+    if (selectedSeats.length !== quantity) return;
+
+    const payload = {
+        screeningId: screeningId,
+        selectedSeats: selectedSeats
+    };
+
+    fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = '/customer/booking-confirmation/' + data.bookingId
+                + '?ref=' + data.bookingRef;
+        } else {
+            alert('Booking failed: ' + data.error);
+            loadSeats();
+        }
+    })
+    .catch(() => alert('An error occurred. Please try again.'));
+});
+
+loadSeats();
+connectWebSocket();
+setInterval(loadSeats, 5000);
+</script>
+</body>
+</html>

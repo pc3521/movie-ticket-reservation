@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('CineBook - Admin Dashboard')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+<main class="main-content">
+    <h2 class="section-title">Admin Dashboard</h2>
+
+    <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+    <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+    <div style="margin-bottom:1.5rem;">
+        <a th:href="@{/admin/add-screening}" class="btn btn-primary">+ Add New Screening</a>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Movie</th>
+                    <th>Date & Time</th>
+                    <th>Hall</th>
+                    <th>Price</th>
+                    <th>Seats</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="screening : ${screenings}">
+                    <td th:text="${screening.id}"></td>
+                    <td th:text="${screening.movie.title}"></td>
+                    <td th:text="${#temporals.format(screening.screenTime, 'MMM dd, yyyy hh:mm a')}"></td>
+                    <td th:text="${screening.hallName}"></td>
+                    <td th:text="'$' + ${screening.price}"></td>
+                    <td th:text="${screening.totalRows * screening.seatsPerRow}"></td>
+                    <td>
+                        <span class="badge"
+                              th:classappend="${screening.screenTime.isAfter(#temporals.createNow())} ? 'badge-active' : 'badge-cancelled'"
+                              th:text="${screening.screenTime.isAfter(#temporals.createNow())} ? 'Upcoming' : 'Past'"></span>
+                    </td>
+                    <td style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <a th:href="@{/admin/statistics/{id}(id=${screening.id})}" class="btn btn-secondary btn-sm">Stats</a>
+                        <a th:if="${screening.screenTime.isAfter(#temporals.createNow())}"
+                           th:href="@{/admin/edit-screening/{id}(id=${screening.id})}" class="btn btn-primary btn-sm">Edit</a>
+                        <form th:if="${screening.screenTime.isAfter(#temporals.createNow())}"
+                              th:action="@{/admin/delete-screening/{id}(id=${screening.id})}" method="post"
+                              onsubmit="return confirm('Delete this screening?');" style="display:inline;">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

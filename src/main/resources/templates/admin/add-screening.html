@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('CineBook - Add Screening')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+<main class="main-content">
+    <div class="form-container" style="max-width:600px;">
+        <h2>Add New Screening</h2>
+
+        <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+        <form th:action="@{/admin/add-screening}" method="post" th:object="${screeningDto}">
+            <div class="form-group">
+                <label>Select Existing Movie (or leave blank for new)</label>
+                <select th:field="*{movieId}" id="movieSelect">
+                    <option value="">-- Create New Movie --</option>
+                    <option th:each="movie : ${movies}" th:value="${movie.id}" th:text="${movie.title}"></option>
+                </select>
+            </div>
+
+            <div id="newMovieFields">
+                <div class="form-group">
+                    <label>Movie Title *</label>
+                    <input type="text" th:field="*{movieTitle}" placeholder="Enter movie title">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea th:field="*{movieDescription}" rows="3" placeholder="Brief description"></textarea>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div class="form-group">
+                        <label>Genre</label>
+                        <input type="text" th:field="*{movieGenre}" placeholder="e.g., Action, Drama">
+                    </div>
+                    <div class="form-group">
+                        <label>Duration (min)</label>
+                        <input type="number" th:field="*{movieDuration}" placeholder="120">
+                    </div>
+                    <div class="form-group">
+                        <label>Rating</label>
+                        <input type="text" th:field="*{movieRating}" placeholder="PG-13">
+                    </div>
+                    <div class="form-group">
+                        <label>Poster URL</label>
+                        <input type="text" th:field="*{moviePosterUrl}" placeholder="https://...">
+                    </div>
+                </div>
+            </div>
+
+            <hr style="border-color:var(--border); margin:1.5rem 0;">
+
+            <div class="form-group">
+                <label>Screening Date & Time *</label>
+                <input type="datetime-local" th:field="*{screenTime}" required>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                    <label>Hall Name</label>
+                    <input type="text" th:field="*{hallName}" placeholder="Hall A">
+                </div>
+                <div class="form-group">
+                    <label>Ticket Price ($) *</label>
+                    <input type="number" step="0.01" th:field="*{price}" required placeholder="12.99">
+                </div>
+                <div class="form-group">
+                    <label>Total Rows</label>
+                    <input type="number" th:field="*{totalRows}" placeholder="8">
+                </div>
+                <div class="form-group">
+                    <label>Seats Per Row</label>
+                    <input type="number" th:field="*{seatsPerRow}" placeholder="10">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <a th:href="@{/admin/dashboard}" class="btn btn-secondary" style="flex:1; text-align:center;">Cancel</a>
+                <button type="submit" class="btn btn-primary" style="flex:1;">Add Screening</button>
+            </div>
+        </form>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+
+<script>
+document.getElementById('movieSelect').addEventListener('change', function() {
+    document.getElementById('newMovieFields').style.display = this.value ? 'none' : 'block';
+});
+</script>
+</body>
+</html>
